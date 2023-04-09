@@ -1,0 +1,54 @@
+`timescale 100us/10us
+
+module bnn_test;
+  
+  parameter LAYERSNUM=8;
+  parameter LAYERSREPLEN=3;
+  parameter NEURONSTOT=32;
+  parameter NEURONSTOTREPLEN=5;
+  parameter NEURONSREPLEN=2;
+  parameter[0:LAYERSNUM*NEURONSREPLEN-1] NEURONSNUM={LAYERSNUM{2'b11}};
+  parameter WEIGHTSTOT=112;
+  parameter WEIGHTSINDREPLEN=8;
+  parameter[0:NEURONSTOTREPLEN*LAYERSNUM-1] NEURONSIND = {5'b00000, 5'b00100, 5'b01000, 5'b01100, 5'b10000, 5'b10100, 5'b11000, 5'b11100};
+  parameter[0:WEIGHTSINDREPLEN*(LAYERSNUM-1)-1] WEIGHTSIND = {8'b00000000, 8'b00100000, 8'b01000000, 8'b01100000, 8'b10000000, 8'b10100000, 8'b11000000};
+  parameter[0:2*(LAYERSNUM-1)-1] BIAS={(LAYERSNUM-1){2'b01}};
+  
+  wire[0:2*(NEURONSNUM[LAYERSNUM*NEURONSREPLEN-NEURONSTOTREPLEN +: NEURONSTOTREPLEN]+1)-1] outval;
+  reg[0:2*(NEURONSNUM[0+:NEURONSREPLEN]+1)-1] inpval;
+  reg clk;
+  
+  bnn
+  #(LAYERSNUM,
+    LAYERSREPLEN,
+    NEURONSTOT,
+    NEURONSTOTREPLEN,
+    NEURONSREPLEN,
+    NEURONSNUM,
+    WEIGHTSTOT,
+    WEIGHTSINDREPLEN,
+    NEURONSIND,
+    WEIGHTSIND,
+    WEIGHTS,
+    BIAS
+   )
+  bnn1
+  (outval,
+   inpval,
+   clk
+  );
+  
+  always #5 clk = ~clk;
+  
+  initial
+    begin
+      $dumpfile("dump.vcd");
+      $dumpvars(1);
+      
+      #5 inpval = {2'b01,2'b11,2'b01,2'b01};
+      #5 inpval = {2'b01,2'b01,2'b01,2'b01};
+      #5 inpval = {2'b11,2'b11,2'b11,2'b11};
+      #5 inpval = {2'b01,2'b11,2'b11,2'b01};
+      
+    end
+endmodule

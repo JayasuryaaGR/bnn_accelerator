@@ -1,0 +1,50 @@
+`timescale 100us/10us
+
+module binclasbnn_testbench;
+  
+  parameter LAYERSNUM = 8;
+  parameter LAYERSREPLEN = 3;
+  parameter NEURONSNUM = 8;
+  parameter NEURONSREPLEN = 3;
+  
+  reg[0:2*NEURONSNUM-1] inp;
+  reg[0:LAYERSREPLEN-1] layersnum;
+  reg[0:LAYERSNUM*NEURONSREPLEN-1] neuronsnum;  
+  reg[0:(LAYERSNUM-1)*NEURONSNUM*NEURONSNUM-1] weights;
+  reg[0:LAYERSNUM-2] bias;
+  reg clk;
+  reg wrmem;
+  wire out;
+  
+  binclasbnn call(out, inp, layersnum, neuronsnum, weights, bias, wrmem, clk);
+  
+  initial
+    begin
+      $dumpfile("dump.vcd");
+      $dumpvars(1);
+//       $monitor("[$monitor] time=%0t wrmem=%b layersnum=%d neuronsnum=%b inp=%b out=%b",$time, wrmem, layersnum, neuronsnum,inp, out);
+      
+      wrmem=1'b1;
+      layersnum=3'b101;
+      neuronsnum={3'b011, 3'b011, 3'b010, 3'b011, 3'b001,9'bx};
+      weights={1'b1,1'b0,1'b1,5'bx,1'b0,1'b1,1'b0,5'bx,1'b1,1'b0,1'b1,5'bx,40'bx,1'b1,1'b1,1'b0,5'bx,1'b0,1'b0,1'b1,5'bx,48'bx,1'b1,1'b0,6'bx,1'b0,1'b0,6'bx,1'b1,1'b1,6'bx,40'bx,1'b0,1'b1,1'b0,5'bx,56'bx,192'bx};
+      bias={6'bx};
+      inp={16'bx};
+      clk = 1;
+      #5
+      
+      clk = 0;
+      #5
+      
+      clk = 1;
+      wrmem=1'b0;
+      layersnum=3'bx;
+      neuronsnum=24'bx;
+      weights=512'bx;
+      bias=6'bx;
+      inp={2'b01,2'b11,2'b01,10'bx};
+      #5
+      
+      $finish;
+    end
+endmodule

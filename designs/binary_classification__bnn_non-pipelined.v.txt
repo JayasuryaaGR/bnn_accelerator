@@ -1,0 +1,106 @@
+`timescale 100us/10us
+
+module binclasbnn(outval, inpval, layersnuminp, neuronsnuminp, weightsinp, biasinp, wrmem, clk);
+  
+  parameter LAYERSNUM = 8;        // #layers supported including input layer
+  parameter LAYERSREPLEN = 3;     // #bits required to represent #layers - log2(LAYERSNUM)
+  parameter NEURONSNUM = 8;       // #neurons per layer
+  parameter NEURONSREPLEN = 3;    // #bits required to represent #neurons per layer - log2(NEURONSNUM)
+  
+  output reg[0:NEURONSREPLEN+1] outval;                     // binary classification output    // NEURONSREPLEN+2 bits needed to hold the sum before activation
+  input[0:2*NEURONSNUM-1] inpval;                           // signed binary values either +1 or -1 represented for every consecutive two bits
+  input[0:LAYERSREPLEN-1] layersnuminp;                     // #layers
+  input[0:LAYERSNUM*NEURONSREPLEN-1] neuronsnuminp;         // #neurons in every layer
+  input[0:(LAYERSNUM-1)*NEURONSNUM*NEURONSNUM-1] weightsinp;    // get weights in unsigned 1's and 0's to reduce connections
+  input[0:LAYERSNUM-2] biasinp;                             // get bias in unsigned 1's and 0's to reduce connections
+  input wrmem;                                              // memory_write - Active high
+  input clk;
+  
+  integer i, j, k;
+  reg[0:LAYERSREPLEN-1] layersnum;                                           // memory for storing layersnuminp
+  reg[0:NEURONSREPLEN-1] neuronsnum[0:LAYERSNUM-1];                          // memory for storing neuronsnuminp
+  reg signed[0:1] weights[0:LAYERSNUM-2][0:NEURONSNUM-1][0:NEURONSNUM-1];    // Memory for weightsinp values
+  reg signed[0:1] bias[0:LAYERSNUM-2];                                       // Memory for biasinp values
+  reg signed[0:NEURONSREPLEN+1] neurons[0:LAYERSNUM-1][0:NEURONSNUM-1];      // Neurons    // NEURONSREPLEN+2 bits needed to hold the sum before activation
+ 
+  
+  always @(posedge clk)
+    begin
+      if(wrmem == 1)    // memory_write is enabled
+        begin
+          layersnum=layersnuminp;    // layersnuminp is stored
+//           $display("layersnum = %b", layersnum);
+          for(i=0;i<LAYERSNUM;i=i+1)    // neuronsnuminp is stored
+            begin
+              neuronsnum[i]=neuronsnuminp[i*NEURONSREPLEN + NEURONSREPLEN-1 -: NEURONSREPLEN];
+            end
+//           $display("neuronsnum = %b", neuronsnum);
+          for(i=1;i<LAYERSNUM;i=i+1)    // weightsinp is stored    // Starts after input layer
+            begin
+              for(j=0;j<NEURONSNUM;j=j+1)
+                begin
+                  for(k=0;k<NEURONSNUM;k=k+1)
+                    begin
+//                       $display("weightsinp[%d] = %b", (i-1)*NEURONSNUM*NEURONSNUM + j*NEURONSNUM + k, weightsinp[(i-1)*NEURONSNUM*NEURONSNUM + j*NEURONSNUM + k]);
+                      if(weightsinp[(i-1)*NEURONSNUM*NEURONSNUM + j*NEURONSNUM + k] == 1'b1)
+                        begin
+                          weights[i-1][j][k][0:1]={1'b0,1'b1};    // Storing as +1 if the input is 1
+                        end
+                      else
+                        begin
+                          weights[i-1][j][k][0:1]={1'b1,1'b1};    // Storing as -1 if the input is 0
+                        end
+//                       $display("weights[%d][%d][%d] = %b", i-1, j, k, weights[i-1][j][k]);
+                    end
+                end
+            end
+//           $display("weights = %b", weights);
+          for(i=1;i<LAYERSNUM;i=i+1)
+            begin
+              if(biasinp[i-1] == 1'b1)
+                bias[i-1][0:1]={1'b0,1'b1};    // Storing as +1 if the input is 1
+              else
+                bias[i-1][0:1]={1'b1,1'b1};    // Storing as -1 if the input is 0
+            end
+//           $display("bias = %b", bias);
+        end
+      else    // BNN Inference
+        begin
+          $display("inpval = %b", inpval);
+          for(i=0;i<NEURONSNUM;i=i+1)    // input layer
+            begin
+              neurons[0][i]=inpval[2*i] ? -1 : 1;
+              $display("neurons[%d][%d] = %b", 0, i, neurons[0][i]);
+            end
+          for(i=1;i<LAYERSNUM;i=i+1)    // dense layers
+            begin
+              for(j=0;j<NEURONSNUM;j=j+1)
+                begin
+                  neurons[i][j][0:4] = (neurons[i-1][0][0] ^ weights[i-1][j][0][0]) ? -1 : 1;    // Binary multiplication of 1st weight and 1st neuron of previous layer
+//                   $display("weights[%d][%d][%d] = %b", i-1, j, 0, weights[i-1][j][0]);
+//                   $display("input[%d][%d] = %b", i-1, 0, neurons[i-1][0]);
+                  for(k=1;k<NEURONSNUM;k=k+1)
+                    begin
+                      if(i<layersnum && j<neuronsnum[i] && k<neuronsnum[i-1])    // calculating only required values
+                        begin
+                          neurons[i][j] = neurons[i][j] + ((neurons[i-1][k][0] ^ weights[i-1][j][k][0]) ? -1 : 1);    // Binary MAC Operation
+//                           $display("input[%d][%d] = %b", i-1, k, neurons[i-1][k]);
+//                           $display("weights[%d][%d][%d] = %b", i-1, j, k, weights[i-1][j][k]);
+                        end
+                    end
+                  neurons[i][j] = neurons[i][j] + bias[i-1];    // adding bias
+                  
+                  // Sign Activation Function
+                  if(neurons[i][j] > 0)
+                    neurons[i][j] = 1;
+                  else
+                    neurons[i][j] = -1;
+//                   $display("neurons[%d][%d] = %b", i, j, neurons[i][j]);
+                end
+            end
+          outval = neurons[layersnum-1][0];    // output
+//           $display("outval = %b", outval);
+        end
+    end
+
+endmodule
